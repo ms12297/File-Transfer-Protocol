@@ -88,7 +88,52 @@ int main()
         char *cmd1 = strtok(command, " \n"); // first token
         char *cmd2 = strtok(NULL, " \n");    // second token
 
-        
+        // command comparison and execution
+        //SET LOGIN to 1 after USERAUTH FOR ALL
+        if (strcmp(cmd1, "!LIST") == 0 && (login == 0)) //SET LOGIN to 1 after USERAUTH FOR ALL
+        //SET LOGIN to 1 after USERAUTH FOR ALL
+        {
+            system("ls"); // client level
+        }
+        else if (strcmp(cmd1, "!PWD") == 0)
+        {
+            system("pwd"); // client level
+        }
+        else if (strcmp(cmd1, "!CWD") == 0)
+        {
+            // chdir(cmd2); // client level
+
+            if (chdir(cmd2) < 0)
+            {
+                perror("550 No such file or directory");
+            }
+            else{
+                printf("200 directory changed to\n");
+                system("pwd");
+            }
+        }
+
+        //SET LOGIN to 1 after USERAUTH
+        else if (strcmp(cmd1, "PORT") == 0 && (login == 0)) 
+        //SET LOGIN to 1 after USERAUTH
+        {
+            // test using cmd2 = "127,0,0,1,20,20" which is the IP + port 5140
+            Port(cmd2); // new port for data channel
+        }
+
+        else if (strcmp(cmd1, "QUIT") == 0) // refer to boilerplate in assignment3
+        {
+            int end = send(socket_FTP,cmd1,strlen(cmd1),0);
+            close(socket_FTP);
+            break;
+        }
+
+        else
+        {
+            printf("202 Command not implemented\n");
+        }
+
+
 
         // boilerplate
 
