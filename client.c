@@ -11,7 +11,7 @@
 
 unsigned long ftp_port;
 char ipAddress[256];
-
+void Port(char *buffer);
 
 
 int main()
@@ -109,3 +109,31 @@ int main()
 	return 0;
 }
 
+
+void Port(char *buffer){ // changing data port
+    char *ip;
+    unsigned long portNo = 0;
+    char newVal[256];
+    char *tokenArray[6];
+    int i = 0;
+
+    strcpy(newVal, buffer);
+
+    char *pchs;
+
+    pchs = strtok(newVal, " ,.-");
+    while (pchs != NULL && i < 6) {
+        tokenArray[i++] = pchs;
+        pchs = strtok(NULL, " ,.-");
+    }
+
+    ip = (char *)malloc(256 * sizeof(char));
+    sprintf(ip, "%s.%s.%s.%s", tokenArray[0], tokenArray[1], tokenArray[2], tokenArray[3]);
+    portNo = atoi(tokenArray[4]) * 256 + atoi(tokenArray[5]);
+
+    strcpy(ipAddress, ip);
+    ftp_port = portNo;
+
+    printf("%s %lu\n", ipAddress, ftp_port);
+
+}
