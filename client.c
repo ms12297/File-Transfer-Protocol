@@ -1,17 +1,22 @@
 #include <stdio.h> // header for input and output from console : printf, perror
-#include<string.h> // strcmp
-#include<sys/socket.h> // for socket related functions
-#include<arpa/inet.h> // htons
+#include <string.h> // strcmp
+#include <sys/socket.h> // for socket related functions
+#include <arpa/inet.h> // htons
 #include <netinet/in.h> // structures for addresses
-#include<unistd.h> // header for unix specic functions declarations : fork(), getpid(), getppid()
-#include<stdlib.h> // header for general fcuntions declarations: exit()
+#include <unistd.h> // header for unix specic functions declarations : fork(), getpid(), getppid()
+#include <stdlib.h> // header for general fcuntions declarations: exit()
 #include <sys/stat.h> // for file size using stat()
 
 #define PORT 9000 // port number for FTP, NOT 21?!
-
+#define SIZE 1024
 unsigned long ftp_port;
 char ipAddress[256];
 void Port(char *buffer);
+//for RETR
+int download(int data_sock, int socket, char* filename);
+//for connection to data channel
+int open_socket(int sock);
+void sendfile(FILE *file, int sockfd);
 
 
 int main()
@@ -47,6 +52,8 @@ int main()
         exit(-1);
     }
     
+    // file variables 
+    FILE *file;
 
     // client address - finding port that is free to use for data channel
     struct sockaddr_in client_addr;
@@ -127,7 +134,27 @@ int main()
             close(socket_FTP);
             break;
         }
-
+        //STOR upload from local 
+        else if (strcmp(cmd1, "STOR") == 0)
+        {
+            //open a new port first
+            file=fopen(cmd2,"r");
+            if (file==NULL){
+                perror("Can't get file");
+                exit(1);
+            }
+            sendfile(file,socket_FTP);
+        }
+        else if (strcmp(cmd1, "RETR") == 0)
+        {
+            int data_sock;
+            if ((data_sock = open_socket(socket_FTP)) < 0) {
+				perror("Error opening socket for data connection");
+			 	exit(1);
+			 }
+            download(data_sock, socket_FTP, cmd2);
+            close(data_sock);
+        }
         else
         {
             printf("202 Command not implemented\n");
@@ -181,4 +208,53 @@ void Port(char *buffer){ // changing data port
 
     printf("%s %lu\n", ipAddress, ftp_port);
 
+}
+
+int download(int data_sock, int socket, char* filename)
+{
+    char data[1024];
+    int size;
+    FILE* fd = fopen(filename, "w");
+    
+    while ((size = recv(data_sock, data, 1024, 0)) > 0) {
+        fwrite(data, 1, size, fd);
+    }
+
+    if (size < 0) {
+        perror("error\n");
+    }
+
+    fclose(fd);
+    return 0;
+}
+
+int open_socket(int sock)
+{
+	int sock_listen = socket_create(PORT);
+    //not sure how the port function would work into this
+    //is client addres in the main function data channel?
+
+	// send an ACK on control conn
+	int ack = 1;
+	if ((send(sock, (char*) &ack, sizeof(ack), 0)) < 0) {
+		printf("client: ack write error :%d\n");
+		exit(1);
+	}		
+
+	int sock_conn = socket_accept(sock_listen);//also this
+	close(sock_listen);
+	return sock_conn;
+}
+
+//function to send file
+void sendfile(FILE *file, int sockfd){
+    char data[SIZE]={0};
+    while (fgets(data, SIZE, file)!=NULL)
+    {
+        if (send(sockfd, data, sizeof(data),0)==-1){
+            perror("can't send file");
+            exit(1);
+        }
+        bzero(data, SIZE);
+    }
 }
