@@ -11,7 +11,6 @@
 #define SIZE 1024
 
 //receive file 
-// void writefile(int sockfd);
 void Retr(int client_sd, int sock_data, char* filename);
 void STOR(int client_sd, int sock_data, char* filename);
 void list(int sock_data, int client_sd);
@@ -135,11 +134,11 @@ int main()
 						system("pwd");
 					}
 				}
-				// else if (strcmp(cmd1, "PORT") == 0) 
-				// {
-				// 	// test using cmd2 = "127,0,0,1,20,20" which is the IP + port 5140
-				// 	Port(cmd2); // new port for data channel
-				// }
+				else if (strcmp(cmd1, "PORT") == 0) 
+				{
+					// test using cmd2 = "127,0,0,1,20,20" which is the IP + port 5140
+					Port(cmd2); // new port for data channel
+				}
 
 				//when command is Quit server send response
 				else if (strcmp(cmd1, "QUIT") == 0) 
@@ -193,26 +192,6 @@ int main()
 	close(server_sd);
 	return 0;
 }
-
-// void writefile(int sockfd)
-// {
-// 	int rec;
-// 	FILE *file;
-// 	char *filename;
-// 	char buffer[SIZE];
-
-// 	file=fopen(filename, "w");
-// 	while(1){
-// 		rec=recv(sockfd, buffer, SIZE,0);
-// 		if (rec<=0){
-// 			break;
-// 			return;
-// 		}
-// 		fprintf(file, "%s", buffer);
-// 		bzero(buffer, SIZE);
-// 	}
-// 	return;
-// }
 
 void list( int sock_data, int client_sd){
 
