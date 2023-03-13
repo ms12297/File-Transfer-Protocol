@@ -11,7 +11,7 @@
 #define SIZE 1024
 
 //receive file 
-void writefile(int sockfd);
+// void writefile(int sockfd);
 void Retr(int client_sd, int sock_data, char* filename);
 void STOR(int client_sd, int sock_data, char* filename);
 void list(int sock_data, int client_sd);
@@ -94,7 +94,7 @@ int main()
 					close(client_sd);
 					exit(1); // terminate client program
 				}
-				strncpy(command, buffer, &buffer_size);
+				strncpy(command, buffer, buffer_size);
         		if (strcmp(command, "\n") == 0)
 		   			continue;
        			// spliting command into tokens
@@ -106,7 +106,8 @@ int main()
 				{
 					char buf[1024];	
 					int sock_data;
-					if ((sock_data = data_connect(client_sd)) < 0) {
+					sock_data=connect(client_sd,(struct sockaddr *) &cliaddr, len);
+					if (sock_data < 0) {
 						close(client_sd);
 						exit(1); 
 					}
@@ -153,7 +154,7 @@ int main()
 					int sock_data;
 					//call the client N+1 port //should get the port from client
 					cliaddr.sin_port+=1;
-					sock_data=connect(client_sd,(struct sockaddr *) &cliaddr, &len);
+					sock_data=connect(client_sd,(struct sockaddr *) &cliaddr, len);
 					if (sock_data < 0) {
 						close(client_sd);
 						exit(1); 
@@ -167,7 +168,7 @@ int main()
 					int sock_data;
 					//call the client N+1 port //should get the port from client
 					cliaddr.sin_port+=1;
-					sock_data=connect(client_sd,(struct sockaddr *) &cliaddr, &len);
+					sock_data=connect(client_sd,(struct sockaddr *) &cliaddr, len);
 					if (sock_data < 0) {
 						close(client_sd);
 						exit(1); 
@@ -179,10 +180,6 @@ int main()
 				{
 					printf("202 Command not implemented\n");
 				}
-
-
-				writefile(client_sd);
-				printf("file received.");
 			}
 			close(client_sd);
 		 }
@@ -222,7 +219,20 @@ void list( int sock_data, int client_sd){
 }
 
 void STOR(int client_sd, int sock_data, char* filename){
-	
+
+	char data[1024];
+    int size;
+    FILE* file = fopen(filename, "w");
+    
+    while ((size = recv(client_sd, data, 1024, 0)) > 0) {
+        fwrite(data, 1, size, file);
+    }
+
+    if (size < 0) {
+        perror("error\n");
+    }
+
+    fclose(file);
 }
 
 void Retr(int client_sd, int sock_data, char* filename)

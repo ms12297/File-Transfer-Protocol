@@ -16,7 +16,7 @@ void Port(char *buffer);
 int download(int data_sock, int socket, char* filename);
 //for connection to data channel
 int open_socket(int sock);
-void sendfile(FILE *file, int sockfd);
+void FTPsendfile(FILE *file, int sockfd);
 
 
 int main()
@@ -80,6 +80,7 @@ int main()
 
 	while(1) // client connection loop - ONLY LOCAL CALLS FOR NOW
 	{
+
         // reseting the buffers and command
 	    bzero(&command, sizeof(command));
         bzero(&buffer, sizeof(buffer));
@@ -94,6 +95,9 @@ int main()
         // spliting command into tokens
         char *cmd1 = strtok(command, " \n"); // first token
         char *cmd2 = strtok(NULL, " \n");    // second token
+
+        //read messages from server
+        int res=recv(socket_FTP, buffer, sizeof(buffer), 0);
 
         // command comparison and execution
         //SET LOGIN to 1 after USERAUTH FOR ALL
@@ -143,8 +147,9 @@ int main()
                 perror("Can't get file");
                 exit(1);
             }
-            sendfile(file,socket_FTP);
+            FTPsendfile(file,socket_FTP);
         }
+        //RETR download to local
         else if (strcmp(cmd1, "RETR") == 0)
         {
             int data_sock;
@@ -153,7 +158,6 @@ int main()
 			 	exit(1);
 			 }
             download(data_sock, socket_FTP, cmd2);
-            close(data_sock);
         }
         else
         {
@@ -164,15 +168,15 @@ int main()
 
         // boilerplate
 
-		if(send(socket_FTP,cmd1,strlen(cmd1),0) < 0)
-		{
-			perror("send");
-			exit(-1);
-		}
-		bzero(cmd1,sizeof(cmd1));
+		// if(send(socket_FTP,cmd1,strlen(cmd1),0) < 0)
+		// {
+		// 	perror("send");
+		// 	exit(-1);
+		// }
+		// bzero(cmd1,sizeof(cmd1));
 
-		int bytes = recv(socket_FTP,cmd1,sizeof(cmd1),0);
-		printf("Server response: %s\n",cmd1);
+		// int bytes = recv(socket_FTP,cmd1,sizeof(cmd1),0);
+		// printf("Server response: %s\n",cmd1);
 
         // boilerplate
 	}
@@ -214,40 +218,45 @@ int download(int data_sock, int socket, char* filename)
 {
     char data[1024];
     int size;
-    FILE* fd = fopen(filename, "w");
+    FILE* file = fopen(filename, "w");
     
     while ((size = recv(data_sock, data, 1024, 0)) > 0) {
-        fwrite(data, 1, size, fd);
+        fwrite(data, 1, size, file);
     }
 
     if (size < 0) {
         perror("error\n");
     }
 
-    fclose(fd);
+    fclose(file);
     return 0;
 }
 
 int open_socket(int sock)
 {
-	int sock_listen = socket_create(PORT);
+    //open the original control socket to send ack
+    struct sockaddr_in client_addr;
+    bzero(&client_addr,sizeof(client_addr));
+    unsigned int len=sizeof(client_addr);
+	int sock_listen = connect(sock,(struct sockaddr *) &client_addr, len);
+
     //not sure how the port function would work into this
     //is client addres in the main function data channel?
 
 	// send an ACK on control conn
 	int ack = 1;
 	if ((send(sock, (char*) &ack, sizeof(ack), 0)) < 0) {
-		printf("client: ack write error :%d\n");
+		printf("client: ack write error\n");
 		exit(1);
 	}		
 
-	int sock_conn = socket_accept(sock_listen);//also this
+    int socket_connect = accept(sock_listen,(struct sockaddr *) &client_addr, &len);
 	close(sock_listen);
-	return sock_conn;
+	return socket_connect;
 }
 
 //function to send file
-void sendfile(FILE *file, int sockfd){
+void FTPsendfile(FILE *file, int sockfd){
     char data[SIZE]={0};
     while (fgets(data, SIZE, file)!=NULL)
     {
