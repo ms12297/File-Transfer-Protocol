@@ -16,6 +16,9 @@ void Port(char *buffer);
 
 int main()
 {
+    char isLoggedIn[256];
+    bzero(&isLoggedIn, sizeof(isLoggedIn));
+
 	//socket
 	int socket_FTP = socket(AF_INET,SOCK_STREAM,0);
 	if(socket_FTP < 0)
@@ -91,7 +94,6 @@ int main()
         // command comparison and execution
         //SET LOGIN to 1 after USERAUTH FOR ALL
         if (strcmp(cmd1, "!LIST") == 0 && (login == 0)) //SET LOGIN to 1 after USERAUTH FOR ALL
-        //SET LOGIN to 1 after USERAUTH FOR ALL
         {
             system("ls"); // client level
         }
@@ -121,10 +123,44 @@ int main()
             Port(cmd2); // new port for data channel
         }
 
-        else if (strcmp(cmd1, "QUIT") == 0) // refer to boilerplate in assignment3
+        else if (strcmp(cmd1, "USER") == 0)
         {
-            int end = send(socket_FTP,cmd1,strlen(cmd1),0);
-            close(socket_FTP);
+            bzero(&client_name, sizeof(client_name));
+            strcpy(buffer, "USER ");
+            strcat(buffer, cmd2);
+            strcat(client_name, cmd2);
+            // sending command to the server
+            send(socket_FTP, buffer, sizeof(buffer), 0);
+
+            recv(socket_FTP, buffer, sizeof(buffer), 0); // recieving message
+            printf("%s\n", buffer);
+        }
+
+        else if (strcmp(cmd1, "PASS") == 0)
+        {
+            strcpy(buffer, "PASS ");
+            strcat(buffer, cmd2);
+
+            send(socket_FTP, buffer, strlen(buffer), 0); // sending the command to the network server
+
+            recv(socket_FTP, buffer, sizeof(buffer), 0); // recieving first logged in
+
+            char *tmp1 = strtok(buffer, " "); // first command
+
+            char *tmp2 = strtok(NULL, "\n"); // second command
+
+            strcpy(isLoggedIn, tmp1);
+
+            printf("%s\n", tmp2);
+        }
+
+        else if (strcmp(cmd1, "QUIT") == 0)
+        {
+            memset(response, '\0', sizeof(response));
+            strcpy(buffer, "QUIT");
+            send(socket_FTP, buffer, sizeof(buffer), 0);
+            recv(socket_FTP, response, sizeof(response), 0);
+            printf("%s\n", response);
             break;
         }
 
@@ -135,19 +171,19 @@ int main()
 
 
 
-        // boilerplate
+        // // boilerplate
 
-		if(send(socket_FTP,cmd1,strlen(cmd1),0) < 0)
-		{
-			perror("send");
-			exit(-1);
-		}
-		bzero(cmd1,sizeof(cmd1));
+		// if(send(socket_FTP,cmd1,strlen(cmd1),0) < 0)
+		// {
+		// 	perror("send");
+		// 	exit(-1);
+		// }
+		// bzero(cmd1,sizeof(cmd1));
 
-		int bytes = recv(socket_FTP,cmd1,sizeof(cmd1),0);
-		printf("Server response: %s\n",cmd1);
+		// int bytes = recv(socket_FTP,cmd1,sizeof(cmd1),0);
+		// printf("Server response: %s\n",cmd1);
 
-        // boilerplate
+        // // boilerplate
 	}
 
 	close(socket_FTP);
