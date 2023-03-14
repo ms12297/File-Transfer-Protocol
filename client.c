@@ -8,7 +8,7 @@
 #include <sys/stat.h> // for file size using stat()
 
 #define PORT 9000 // port number for FTP, NOT 21?!
-#define SIZE 1024
+
 unsigned long ftp_port;
 char ipAddress[256];
 void Port(char *buffer);
@@ -17,6 +17,7 @@ int download(int data_sock, int socket, char* filename);
 //for connection to data channel
 int open_socket(int socket);
 void FTPsendfile(FILE *file, int sockfd);
+int list(int data_sock, int socket);
 
 
 int main()
@@ -96,10 +97,6 @@ int main()
         char *cmd1 = strtok(command, " \n"); // first token
         char *cmd2 = strtok(NULL, " \n");    // second token
 
-        int com = send(socket_FTP, buffer, sizeof(buffer),0);
-        //read messages from server
-        int res=recv(socket_FTP, buffer, sizeof(buffer), 0);
-
         // command comparison and execution
         //SET LOGIN to 1 after USERAUTH FOR ALL
         if (strcmp(cmd1, "!LIST") == 0 && (login == 0)) //SET LOGIN to 1 after USERAUTH FOR ALL
@@ -124,6 +121,36 @@ int main()
                 system("pwd");
             }
         }
+        else if (strcmp(cmd1, "PWD") == 0) {
+            if (login == 1) {
+                strcat(buffer, cmd1);
+                strcat(buffer, " ");
+                strcat(buffer, client_name);
+                send(socket_FTP, buffer, strlen(buffer), 0);
+                recv(socket_FTP, buffer, sizeof(buffer), 0);
+                printf("%s\n", buffer);
+            }
+            else {
+                printf("530 Not Logged in.\n");
+            }
+            
+        }
+        else if (strcmp(cmd1, "CWD") == 0) {
+
+            if (login == 1) {
+                strcpy(buffer, "CWD ");
+                strcat(buffer, cmd2);
+                strcat(buffer, " ");
+                strcat(buffer, client_name);
+                send(socket_FTP, buffer, strlen(buffer), 0);
+                recv(socket_FTP, buffer, sizeof(buffer), 0);
+                printf("%s\n", buffer);
+            }
+            else {
+                printf("530 Not Logged in.\n");
+            }
+            
+        }
 
         //SET LOGIN to 1 after USERAUTH
         else if (strcmp(cmd1, "PORT") == 0 && (login == 0)) 
@@ -132,12 +159,57 @@ int main()
             // test using cmd2 = "127,0,0,1,20,20" which is the IP + port 5140
             Port(cmd2); // new port for data channel
         }
-
-        else if (strcmp(cmd1, "QUIT") == 0) // refer to boilerplate in assignment3
+         else if (strcmp(cmd1, "USER") == 0)
         {
-            int end = send(socket_FTP,cmd1,strlen(cmd1),0);
-            close(socket_FTP);
+            bzero(&client_name, sizeof(client_name));
+            strcpy(buffer, "USER ");
+            strcat(buffer, cmd2);
+            strcat(client_name, cmd2);
+            // sending command to the server
+            send(socket_FTP, buffer, sizeof(buffer), 0);
+
+            recv(socket_FTP, buffer, sizeof(buffer), 0); // recieving message
+            printf("%s\n", buffer);
+        }
+
+        else if (strcmp(cmd1, "PASS") == 0)
+        {
+            strcpy(buffer, "PASS ");
+            strcat(buffer, cmd2);
+
+            send(socket_FTP, buffer, strlen(buffer), 0); // sending the command to the network server
+
+            recv(socket_FTP, buffer, sizeof(buffer), 0); // recieving first logged in
+
+            char *tmp1 = strtok(buffer, " "); // first command
+
+            if (strcmp(tmp1, "loggedIn") == 0) {
+                login = 1;
+            }
+
+            char *tmp2 = strtok(NULL, "\n"); // second command
+
+            printf("%s\n", tmp2);
+        }
+
+        else if (strcmp(cmd1, "QUIT") == 0)
+        {
+            memset(response, '\0', sizeof(response));
+            strcpy(buffer, "QUIT");
+            send(socket_FTP, buffer, sizeof(buffer), 0);
+            recv(socket_FTP, response, sizeof(response), 0);
+            printf("%s\n", response);
             break;
+        }
+
+        else if (strcmp(cmd1, "LIST") == 0) // refer to boilerplate in assignment3
+        {
+            int data_sock;
+            data_sock = open_socket(socket_FTP);
+            if (data_sock < 0) {
+				perror("Error opening socket");
+			 }
+             list(data_sock, socket_FTP);
         }
         //STOR upload from local 
         else if (strcmp(cmd1, "STOR") == 0)
@@ -162,9 +234,8 @@ int main()
             int data_sock;
             data_sock = open_socket(socket_FTP);
             if (data_sock < 0) {
-				perror("Error opening socket for data connection");
+				perror("Error opening socket");
 			 }
-            int res=recv(data_sock, buffer, sizeof(buffer), 0);
             download(data_sock, socket_FTP, cmd2);
             
         }
@@ -204,6 +275,7 @@ void Port(char *buffer){ // changing data port
 
     strcpy(ipAddress, ip);
     ftp_port = portNo;
+    printf("200 PORT command successful.");
     printf("%s,%lu", ipAddress, ftp_port);
 }
 
@@ -288,13 +360,42 @@ int open_socket(int socketcon)
 
 //function to send file
 void FTPsendfile(FILE *file, int sockfd){
-    char data[SIZE]={0};
-    while (fgets(data, SIZE, file)!=NULL)
+    char data[1024]={0};
+    while (fgets(data, 1024, file)!=NULL)
     {
         if (send(sockfd, data, sizeof(data),0)==-1){
             perror("can't send file");
             exit(1);
         }
-        bzero(data, SIZE);
+        bzero(data, 1024);
     }
+}
+
+int list(int data_sock, int socket)
+{
+    size_t received;
+    char buf[1024];
+    int here=0;
+
+    //receiving 150 reply
+    if (recv(socket, &here, sizeof(here), 0) < 0) {
+		perror("client: error reading message from server\n");
+	}
+
+    //receiving the file containing the list
+    memset(buf, 0, sizeof(buf));
+	while ((received = recv(data_sock, buf, 1024, 0)) > 0) {
+        	printf("%s", buf);
+		memset(buf, 0, sizeof(buf));
+	}
+	//if not receiving anything
+	if (received < 0) {
+	        perror("error");
+	}
+    //for 226 reply
+	if (recv(socket, &here, sizeof(here), 0) < 0) {
+		perror("client: error reading message from server\n");
+		return -1;
+	}
+	return 0;
 }

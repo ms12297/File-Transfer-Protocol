@@ -1,228 +1,416 @@
-#include<stdio.h>
-#include<string.h>
-#include<sys/socket.h>
-#include<arpa/inet.h>
+#include <stdio.h>
+#include <string.h>
+#include <sys/socket.h>
+#include <arpa/inet.h>
 #include <netinet/in.h>
-#include<unistd.h>
-#include<stdlib.h>
+#include <unistd.h>
+#include <stdlib.h>
 #include <sys/stat.h>
+#include <sys/select.h> // for select() and fd_set
 
 #define PORT 9000 // NOT 21?!
-#define SIZE 1024
+#define MAX_USERS 20
 
-//receive file 
-void Retr(int client_sd, int sock_data, char* filename);
-void STOR(int client_sd, int sock_data, char* filename);
+// receive file
+void Retr(int client_sd, int sock_data, char *filename);
+void STOR(int client_sd, int sock_data, char *filename);
 void list(int sock_data, int client_sd);
-char *response; //number response to the server
+char *response; // number response to the server
+
+int active_users = 0;
+
+struct user
+{
+	char userName[1024];	  // user name
+	char userPassword[1024];  // user password
+	char userDirectory[1024]; // user directory
+	int loggedIn;			  // flag to check login status
+};
+
+struct user users[MAX_USERS]; // max number of users
+
+void readUsers()
+{
+	FILE *fp = fopen("users.txt", "r");
+	if (fp == NULL)
+	{
+		printf("Error opening file!\n");
+		exit(1);
+	}
+	int i = 0;
+	while (fscanf(fp, "%s %s", users[i].userName, users[i].userPassword) != EOF)
+	{
+		active_users++;
+		i++;
+	}
+	fclose(fp);
+}
+
+void authenticateUser(char *buffer, int socket, char *name)
+{
+	// Validate user name
+	for (int i = 0; i < active_users; i++)
+	{
+		if (strcmp(users[i].userName, buffer) == 0) // Finding the user
+		{
+			printf("%s is attempting login\n", buffer);
+			send(socket, "331 Username OK, need password.", 99, 0);
+			users[i].loggedIn = 1;
+			strcpy(name, buffer);
+			return;
+		}
+	}
+	send(socket, "530 Not logged in.", 99, 0);
+}
+
+int authenticatePass(char *buffer, int socket, char *name)
+{
+	for (int i = 0; i < active_users; i++)
+	{
+
+		if ((strcmp(users[i].userName, name) == 0) && (strcmp(users[i].userPassword, buffer) == 0))
+		{
+			printf("%s has logged in\n", name);
+			send(socket, "loggedIn 230 User logged in, proceed.", 99, 0);
+			return 1;
+		}
+	}
+
+	printf("Not logged in\n");
+	send(socket, "notIn 530 Not Logged In.", 99, 0);
+	return 0;
+}
 
 int main()
 {
-	//socket created
-	int server_sd = socket(AF_INET,SOCK_STREAM,0);
+	readUsers(); // loading the data users into struct
 
-	if(server_sd<0)
+	// initialize the users
+	struct user curr_user;
+	char username[1024];
+	strcpy(username, "xxxxxxx");
+
+	char path[1024];
+	getcwd(path, 1024);
+
+	for (int i = 0; i < active_users; i++)
+	{
+		strcpy(users[i].userDirectory, path);
+		users[i].loggedIn = 0;
+	}
+	// socket created
+	int server_sd = socket(AF_INET, SOCK_STREAM, 0);
+
+	if (server_sd < 0)
 	{
 		perror("socket:");
 		exit(-1);
 	}
-	//setsock
-	int value  = 1;
-	setsockopt(server_sd,SOL_SOCKET,SO_REUSEADDR,&value,sizeof(value)); //&(int){1},sizeof(int)
+	// setsock
+	int value = 1;
+	setsockopt(server_sd, SOL_SOCKET, SO_REUSEADDR, &value, sizeof(value)); //&(int){1},sizeof(int)
 	struct sockaddr_in server_addr;
-	bzero(&server_addr,sizeof(server_addr));
+	bzero(&server_addr, sizeof(server_addr));
 	server_addr.sin_family = AF_INET;
 	server_addr.sin_port = htons(PORT);
-	server_addr.sin_addr.s_addr = INADDR_ANY; //INADDR_ANY, INADDR_LOOP
+	server_addr.sin_addr.s_addr = INADDR_ANY; // INADDR_ANY, INADDR_LOOP
 
-	//bind
-	if(bind(server_sd, (struct sockaddr*)&server_addr,sizeof(server_addr))<0)
+	// bind
+	if (bind(server_sd, (struct sockaddr *)&server_addr, sizeof(server_addr)) < 0)
 	{
 		perror("bind failed");
 		exit(-1);
 	}
-	//listen
-	if(listen(server_sd,5)<0)
+	// listen
+	if (listen(server_sd, 5) < 0)
 	{
 		perror("listen failed");
 		close(server_sd);
 		exit(-1);
 	}
 
+	// 2 fd sets - back and forth
+	fd_set all_sockets;
+	fd_set ready_sockets;
+
+	// zero out/iniitalize our set of all sockets
+	FD_ZERO(&all_sockets);
+
+	// add the current socket to the fd set of all sockets
+	FD_SET(server_sd, &all_sockets);
 
 	struct sockaddr_in cliaddr;
-    bzero(&cliaddr,sizeof(cliaddr));
-    unsigned int len = sizeof(cliaddr);
-
+	bzero(&cliaddr, sizeof(cliaddr));
+	unsigned int len = sizeof(cliaddr);
 
 	printf("Server is listening...\n");
-
-	while(1)
+	while (1)
 	{
-		//accept
-		// int client_sd = accept(server_sd,0,0);
+		ready_sockets = all_sockets;
 
-		int client_sd = accept(server_sd,(struct sockaddr *) &cliaddr, &len);
-		// socket
-		if (client_sd<0){
-			printf("Can't find client");
-			break;
+		if (select(FD_SETSIZE, &ready_sockets, NULL, NULL, NULL) < 0)
+		{
+			perror("select error");
+			exit(EXIT_FAILURE);
 		}
-
-		printf("[%s:%d] Connected\n", inet_ntoa(cliaddr.sin_addr),ntohs(cliaddr.sin_port));	
-	
-		int pid = fork(); //fork a child process
-		if(pid == 0)   //if it is the child process
-		 {
-		 	close(server_sd); //close the copy of server/master socket in child process
-			//buffer to read the client input of commands
-		 	char buffer[1024];
-			char *command; //command input var pointer
-			size_t buffer_size = 256;
-    		command = (char *)malloc(buffer_size * sizeof(char));
-			while(1)
+		for (int fd = 0; fd < FD_SETSIZE; fd++)
+		{
+			if (FD_ISSET(fd, &ready_sockets))
 			{
-				bzero(buffer,sizeof(buffer));
-				bzero(&command, sizeof(command));
-				bzero(&response, sizeof(response));
-				//receive command from client
-				int bytes = recv(client_sd,buffer,sizeof(buffer),0);
-				if(bytes==0)   //client has closed the connection
+				if (fd == server_sd)
 				{
-					printf("Disconnected\n");
-					close(client_sd);
-					exit(1); // terminate client program
-				}
-				strncpy(command, buffer, buffer_size);
-        		if (strcmp(command, "\n") == 0)
-		   			continue;
-       			// spliting command into tokens
-       		 	char *cmd1 = strtok(command, " "); // first token
-        		char *cmd2 = strtok(NULL, " ");    // second token
+					// accept the connection
+					int client_sd = accept(server_sd, (struct sockaddr *)&cliaddr, &len);
+					printf("[%s:%d] Connected\n", inet_ntoa(cliaddr.sin_addr), ntohs(cliaddr.sin_port));
 
-				// command comparison and execution
-				if (strcmp(cmd1, "LIST") == 0)
-				{
-					char buf[1024];	
-					int sock_data;
-					sock_data=connect(client_sd,(struct sockaddr *) &cliaddr, len);
-					if (sock_data < 0) {
-						close(client_sd);
-						exit(1); 
-					}
-					list(sock_data, client_sd);
-					close(sock_data);
-				}
-
-				//RETR for server to respond
-				else if (strcmp(cmd1, "RETR") == 0)
-				{	
-					int sock_data;
-					//call the client N+1 port //should get the port from client
-					//cliaddr.sin_port+=1;
-					printf("herefunction");
-					sock_data=connect(client_sd,(struct sockaddr *) &cliaddr, len);
-					if (sock_data < 0) {
-						close(client_sd);
-						exit(1); 
-					}
-					Retr(client_sd, sock_data, cmd2);
-					close(sock_data);
-				}
-				//STOR for server to respond
-				else if (strcmp(cmd1, "STOR") == 0)
-				{	
-					int sock_data;
-					//start data connection
-					printf("herefunction");
-					sock_data=connect(client_sd,(struct sockaddr *) &cliaddr, len);
-					if (sock_data < 0) {
-						close(client_sd);
-						exit(1); 
-					}
-					STOR(client_sd, sock_data, cmd2);
-					close(sock_data);
+					// add the newly accepted socket to the set of all sockets that we are watching
+					FD_SET(client_sd, &all_sockets);
 				}
 				else
 				{
-					printf("202 Command not implemented\n");
+					// to specify client - debugging - REMOVE LATER
+					printf("[%s:%d]%s", inet_ntoa(cliaddr.sin_addr), ntohs(cliaddr.sin_port), " ");
+
+					char buffer[1024]; // for storing
+					char response[1024];
+
+					bzero(response, sizeof(response));
+					bzero(buffer, sizeof(buffer));
+
+					int bytes = recv(fd, buffer, sizeof(buffer), 0);
+
+					if (bytes == 0)
+					{ // connection closed
+						printf("Disconnected\n");
+						close(fd);
+						// removing the socket from file descriptors
+						FD_CLR(fd, &all_sockets);
+					}
+					else
+					{
+						// splitting the response
+						char *tokenArray[3];
+						int index = 0;
+
+						// Seperating by spaces
+						tokenArray[index] = strtok(buffer, " \n");
+						while (tokenArray[index] != NULL)
+						{
+							tokenArray[++index] = strtok(NULL, " \n");
+						}
+
+						if (strcmp(tokenArray[0], "USER") == 0)
+						{
+							authenticateUser(tokenArray[1], fd, username);
+						}
+						else if (strcmp(tokenArray[0], "PASS") == 0)
+						{
+							authenticatePass(tokenArray[1], fd, username);
+							// login still works if password incorrect once - error checking not required in depth
+						}
+						else if (strcmp(tokenArray[0], "PWD") == 0)
+						{
+							// find user to get dir
+							for (int i = 0; i < active_users; i++)
+							{
+								if (strcmp(users[i].userName, tokenArray[1]) == 0)
+								{
+									strcpy(response, users[i].userDirectory);
+									send(fd, users[i].userDirectory, sizeof(users[i].userDirectory), 0);
+								}
+							}
+						}
+						if (strcmp(tokenArray[0], "CWD") == 0)
+						{
+							char *command = tokenArray[1];
+							char currPath[1024];
+
+							for (int i = 0; i < active_users; i++)
+							{
+								if (strcmp(users[i].userName, tokenArray[2]) == 0)
+								{
+									// moving to user dir first
+									chdir(users[i].userDirectory);
+
+									if (chdir(command) == 0)
+									{
+										char msg[1024] = "200 directory changed to ";
+										// sending path back
+										getcwd(currPath, 1024);
+										strcat(msg, currPath);
+										send(fd, msg, sizeof(msg), 0);
+										// setting new path
+										strcpy(users[i].userDirectory, currPath);
+									}
+									else
+									{
+										perror("chdir failed");
+										send(fd, "550 No such file or directory.", sizeof(response), 0);
+									}
+								}
+							}
+						}
+						else if (strcmp(tokenArray[0], "QUIT") == 0)
+						{
+							strcpy(response, "221 Service closing control connection.");
+							send(fd, response, sizeof(response), 0);
+							printf("Disconnected\n");
+							close(fd);
+							FD_CLR(fd, &all_sockets);
+						}
+						else if (strcmp(tokenArray[0], "LIST") == 0)
+						{
+							printf("LISTINGGGG");
+							char buf[1024];
+							int sock_data;
+							sock_data = connect(server_sd, (struct sockaddr *)&cliaddr, len);
+							if (sock_data < 0)
+							{
+								close(server_sd);
+								exit(1);
+							}
+							list(sock_data, server_sd);
+							close(sock_data);
+						}
+						// RETR for server to respond
+						else if (strcmp(tokenArray[0], "RETR") == 0)
+						{
+							int sock_data;
+							// call the client N+1 port //should get the port from client
+							// cliaddr.sin_port+=1;
+							printf("herefunction");
+							sock_data = connect(server_sd, (struct sockaddr *)&cliaddr, len);
+							if (sock_data < 0)
+							{
+								close(server_sd);
+								exit(1);
+							}
+							Retr(server_sd, sock_data, tokenArray[1]);
+							close(sock_data);
+						}
+						// STOR for server to respond
+						else if (strcmp(tokenArray[0], "STOR") == 0)
+						{
+							int sock_data;
+							// start data connection
+							printf("herefunction");
+							sock_data = connect(server_sd, (struct sockaddr *)&cliaddr, len);
+							if (sock_data < 0)
+							{
+								close(server_sd);
+								exit(1);
+							}
+							STOR(server_sd, sock_data, tokenArray[1]);
+							close(sock_data);
+						}
+						else
+						{
+							printf("202 Command not implemented\n");
+						}
+					}
 				}
 			}
-			close(client_sd);
-		 }
-		 else //if it is the parent process
-		 {
-		 	close(client_sd); //close the copy of client/secondary socket in parent process 
-		 }
+		}
 	}
-
-	//close
+	// close
 	close(server_sd);
 	return 0;
 }
 
-void list( int sock_data, int client_sd){
+void list(int sock_data, int client_sd)
+{
+	char data[1024];
+	size_t size;
+	FILE *file;
+	int res = system("ls -l > here.txt");
+	file = fopen("here.txt", "r");
+	if (!file)
+	{
+		perror("can't see list");
+	}
+	else
+	{
+		char res1[] = "150 File status okay; about to open. data connection.";
+		strcpy(response, res1);
+		int end = send(client_sd, response, strlen(response), 0);
+	}
+
+	fseek(file, SEEK_SET, 0);
+	memset(data, 0, 1024);
+	while ((size = fread(data, 1, 1024, file)) > 0)
+	{
+		if (send(sock_data, data, size, 0) < 0)
+		{
+			perror("err");
+		}
+		memset(data, 0, 1024);
+	}
+	fclose(file);
+	char res2[] = "226 Transfer completed.";
+	strcpy(response, res2);
+	int end2 = send(client_sd, response, strlen(response), 0);
+}
+
+void STOR(int client_sd, int sock_data, char *filename)
+{
+
 	char data[1024];
 	int size;
-	FILE* file;
+	FILE *file = fopen(filename, "w");
 
+	while ((size = recv(client_sd, data, 1024, 0)) > 0)
+	{
+		fwrite(data, 1, size, file);
+	}
 
+	if (size < 0)
+	{
+		perror("error\n");
+	}
+
+	fclose(file);
 }
 
-void STOR(int client_sd, int sock_data, char* filename){
-
+void Retr(int client_sd, int sock_data, char *filename)
+{
+	FILE *fd;
 	char data[1024];
-    int size;
-    FILE* file = fopen(filename, "w");
-    
-    while ((size = recv(client_sd, data, 1024, 0)) > 0) {
-        fwrite(data, 1, size, file);
-    }
+	size_t read;
 
-    if (size < 0) {
-        perror("error\n");
-    }
-
-    fclose(file);
-}
-
-void Retr(int client_sd, int sock_data, char* filename)
-{	
-	FILE* fd;
-	char data[1024];
-	size_t read;							
-		
 	fd = fopen(filename, "r");
 	printf("hereread");
-	
-	if (!fd) {	
-		char res[]="550 No such file or directory";
-		strcpy(response,res);
-		int end = send(client_sd,response,strlen(response),0);
-		
-	} else {
-		printf("here");	
-		char res[]="150 File status okay; about to open. data connection.";
-		strcpy(response,res);
-		int end1 = send(client_sd,response,strlen(response),0);
-	
-		while (read >= 0) {
+
+	if (!fd)
+	{
+		char res[] = "550 No such file or directory";
+		strcpy(response, res);
+		int end = send(client_sd, response, strlen(response), 0);
+	}
+	else
+	{
+		printf("here");
+		char res[] = "150 File status okay; about to open. data connection.";
+		strcpy(response, res);
+		int end1 = send(client_sd, response, strlen(response), 0);
+
+		while (read >= 0)
+		{
 			read = fread(data, 1, 1024, fd);
 
-			if (read < 0) {
+			if (read < 0)
+			{
 				printf("error fread()\n");
 			}
 
 			// send block
 			if (send(sock_data, data, read, 0) < 0)
 				perror("error sending file\n");
+		};
 
-		};	
+		char res2[] = "226 Transfer completed.";
+		strcpy(response, res2);
+		int end2 = send(client_sd, response, strlen(response), 0);
 
-		char res2[]="226 Transfer completed.";
-		strcpy(response,res2);
-		int end2 = send(client_sd,response,strlen(response),0);
-		
 		fclose(fd);
 	}
 }
