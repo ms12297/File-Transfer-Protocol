@@ -10,7 +10,7 @@
 #define PORT 9000 // port number for FTP, NOT 21?!
 
 unsigned long ftp_port;
-unsigned long data_port;
+int data_port;
 char ipAddress[256];
 // for RETR
 int download(int data_sock, char *filename);
@@ -63,7 +63,7 @@ int main()
     ftp_port = htons(client_addr.sin_port);
     sprintf(ipAddress, "%s", inet_ntoa(client_addr.sin_addr));
 
-    data_port = ftp_port;
+    data_port = ntohs(ftp_port);
 
     // welcome
     printf("220 Service ready for new user.\n");
@@ -162,7 +162,7 @@ int main()
             int p1, p2;
             p1 = data_port / 256;
             p2 = data_port % 256;
-            char send_port[256] = "127,0,0,1";
+            char send_port[256] = "127,0,0,1,";
             char pf[256];
             char pb[256];
             sprintf(pf, "%d", p1);
@@ -170,12 +170,18 @@ int main()
             strcat(send_port, pf);
             strcat(send_port, ",");
             strcat(send_port, pb);
+            printf("%s\n",pf);
+            printf("%s\n",pb);
+            printf("%s\n",send_port);
             // send port info
             int sent;
             sent = send(socket_FTP, send_port, strlen(send_port), 0);
             if (sent < 0)
             {
-                perror("send socket");
+                perror("send socket\n");
+            }
+            else{
+                printf("200 PORT command successful.\n");
             }
         }
         else if (strcmp(cmd1, "USER") == 0)
@@ -237,7 +243,7 @@ int main()
             int p1, p2;
             p1 = data_port / 256;
             p2 = data_port % 256;
-            char send_port[256] = "127,0,0,1";
+            char send_port[256] = "127,0,0,1,";
             char pf[256];
             char pb[256];
             sprintf(pf, "%d", p1);
@@ -340,7 +346,7 @@ int main()
                 int p1, p2;
                 p1 = data_port / 256;
                 p2 = data_port % 256;
-                char send_port[256] = "127,0,0,1";
+                char send_port[256] = "127,0,0,1,";
                 char pf[256];
                 char pb[256];
                 sprintf(pf, "%d", p1);
@@ -413,21 +419,13 @@ int main()
         // RETR download to local
         else if (strcmp(cmd1, "RETR") == 0)
         {
-            // send the command
-            strcpy(buffer, "RETR ");
-            strcat(buffer, cmd2);
-
-            if (send(socket_FTP, buffer, strlen(buffer), 0) < 0)
-            {
-                perror("not sent");
-            }
-            recv(socket_FTP, response, sizeof(response), 0);
             // new data port number send port info to server
-            data_port = data_port + 1;
+            data_port++;
+            printf("%d\n", data_port);
             int p1, p2;
             p1 = data_port / 256;
             p2 = data_port % 256;
-            char send_port[256] = "127,0,0,1";
+            char send_port[256] = "127,0,0,1,";
             char pf[256];
             char pb[256];
             sprintf(pf, "%d", p1);
@@ -435,6 +433,9 @@ int main()
             strcat(send_port, pf);
             strcat(send_port, ",");
             strcat(send_port, pb);
+            printf("%s\n", pf);
+            printf("%s\n", send_port);
+
             // send port info
             int sent;
             sent = send(socket_FTP, send_port, strlen(send_port), 0);
@@ -444,16 +445,33 @@ int main()
             }
             // receive ack
             int ack;
-            ack = recv(socket_FTP, buffer, sizeof(buffer), 0);
+            bzero(response,sizeof(response));
+            ack = recv(socket_FTP, response, sizeof(response), 0);
 
-            if (ack > 0)
+            if (ack < 0)
             {
-                printf("200 PORT command successful.\n");
+                printf("port not acked");
+                exit(1);
             }
             else
             {
-                printf("port not acked");
+                printf("%s\n", response);
             }
+            // send the command
+            bzero(buffer,sizeof(buffer));
+            strcpy(buffer, "RETR ");
+            strcat(buffer, cmd2);
+
+            if (send(socket_FTP, buffer, strlen(buffer), 0) < 0)
+            {
+                perror("not sent");
+            }
+            else{
+                printf("SENT");
+            }
+            bzero(buffer,sizeof(buffer));
+            recv(socket_FTP, response, sizeof(response), 0);
+            printf("%s\n",response);
 
             struct sockaddr_in socket_addr, socket_transfer_addr;
             unsigned int len = sizeof(socket_addr);

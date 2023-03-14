@@ -313,8 +313,13 @@ int main()
 							char buf[256];
 							bzero(buf, sizeof(buf));
 							// call the client N+1 port //should get the port from client
-							recv(fd, buf, sizeof(buf), 0); // recieving message here is port info
-							printf("receiving");
+							int yt=recv(fd, buf, sizeof(buf), 0); // recieving message here is port info
+							if (yt<0){
+								perror("can't get");
+							}
+							else{
+								printf("receiving");
+							}
 							printf("%s", buf);
 
 							// if received port and address Ack sending to client for port command
