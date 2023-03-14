@@ -16,9 +16,6 @@ void Port(char *buffer);
 
 int main()
 {
-    char isLoggedIn[256];
-    bzero(&isLoggedIn, sizeof(isLoggedIn));
-
 	//socket
 	int socket_FTP = socket(AF_INET,SOCK_STREAM,0);
 	if(socket_FTP < 0)
@@ -93,7 +90,7 @@ int main()
 
         // command comparison and execution
         //SET LOGIN to 1 after USERAUTH FOR ALL
-        if (strcmp(cmd1, "!LIST") == 0 && (login == 0)) //SET LOGIN to 1 after USERAUTH FOR ALL
+        if (strcmp(cmd1, "!LIST") == 0) //SET LOGIN to 1 after USERAUTH FOR ALL
         {
             system("ls"); // client level
         }
@@ -103,8 +100,6 @@ int main()
         }
         else if (strcmp(cmd1, "!CWD") == 0)
         {
-            // chdir(cmd2); // client level
-
             if (chdir(cmd2) < 0)
             {
                 perror("550 No such file or directory");
@@ -114,9 +109,24 @@ int main()
                 system("pwd");
             }
         }
+        else if (strcmp(cmd1, "PWD") == 0)
+        {
+            if (login == 1) {
+                strcat(buffer, cmd1);
+                strcat(buffer, " ");
+                strcat(buffer, client_name);
+                send(socket_FTP, buffer, strlen(buffer), 0);
+                recv(socket_FTP, buffer, sizeof(buffer), 0);
+                printf("%s\n", buffer);
+            }
+            else {
+                printf("530 Not Logged in.\n");
+            }
+            
+        }
 
         //SET LOGIN to 1 after USERAUTH
-        else if (strcmp(cmd1, "PORT") == 0 && (login == 0)) 
+        else if (strcmp(cmd1, "PORT") == 0) 
         //SET LOGIN to 1 after USERAUTH
         {
             // test using cmd2 = "127,0,0,1,20,20" which is the IP + port 5140
@@ -147,9 +157,11 @@ int main()
 
             char *tmp1 = strtok(buffer, " "); // first command
 
-            char *tmp2 = strtok(NULL, "\n"); // second command
+            if (strcmp(tmp1, "loggedIn") == 0) {
+                login = 1;
+            }
 
-            strcpy(isLoggedIn, tmp1);
+            char *tmp2 = strtok(NULL, "\n"); // second command
 
             printf("%s\n", tmp2);
         }
@@ -169,21 +181,6 @@ int main()
             printf("202 Command not implemented\n");
         }
 
-
-
-        // // boilerplate
-
-		// if(send(socket_FTP,cmd1,strlen(cmd1),0) < 0)
-		// {
-		// 	perror("send");
-		// 	exit(-1);
-		// }
-		// bzero(cmd1,sizeof(cmd1));
-
-		// int bytes = recv(socket_FTP,cmd1,sizeof(cmd1),0);
-		// printf("Server response: %s\n",cmd1);
-
-        // // boilerplate
 	}
 
 	close(socket_FTP);

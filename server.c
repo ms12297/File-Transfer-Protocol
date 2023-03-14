@@ -62,13 +62,13 @@ int authenticatePass(char *buffer, int socket, char *name)
 
 		if ((strcmp(users[i].userName, name) == 0) && (strcmp(users[i].userPassword, buffer) == 0)) {
 			printf("%s has logged in\n", name);
-			send(socket, "pad 230 User logged in, proceed.", 99, 0);
+			send(socket, "loggedIn 230 User logged in, proceed.", 99, 0);
 			return 1;
 		}
 	}
 
 	printf("Not logged in\n");
-	send(socket, "pad 530 Not Logged In.", 99, 0);
+	send(socket, "notIn 530 Not Logged In.", 99, 0);
 	return 0;
 }
 
@@ -198,6 +198,15 @@ int main()
 						else if (strcmp(tokenArray[0], "PASS") == 0) {
 							authenticatePass(tokenArray[1], fd, username);
 							// login still works if password incorrect once - error checking not required in depth
+						}
+						else if (strcmp(tokenArray[0], "PWD") == 0) {
+							// find user to get dir
+							for (int i = 0; i < active_users; i++) {
+								if (strcmp(users[i].userName, tokenArray[1]) == 0) {
+									strcpy(response, users[i].userDirectory);
+									send(fd, users[i].userDirectory, sizeof(users[i].userDirectory), 0);
+								}
+							}
 						}
 						else if (strcmp(tokenArray[0], "QUIT") == 0) {
 							strcpy(response, "221 Service closing control connection.");
