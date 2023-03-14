@@ -208,6 +208,35 @@ int main()
 								}
 							}
 						}
+
+
+						if (strcmp(tokenArray[0], "CWD") == 0) {
+							char *command = tokenArray[1];
+							char currPath[1024];
+
+							for (int i = 0; i < active_users; i++) {
+								if (strcmp(users[i].userName, tokenArray[2]) == 0) {
+									// moving to user dir first
+									chdir(users[i].userDirectory);
+
+									if (chdir(command) == 0) {
+										char msg[1024] = "200 directory changed to ";
+										// sending path back
+										getcwd(currPath, 1024);
+										strcat(msg, currPath);
+										send(fd, msg, sizeof(msg), 0);
+										// setting new path
+										strcpy(users[i].userDirectory, currPath);
+									}
+									else {
+										perror("chdir failed");
+										send(fd, "550 No such file or directory.", sizeof(response), 0);
+									}
+								}
+							}
+						}
+
+
 						else if (strcmp(tokenArray[0], "QUIT") == 0) {
 							strcpy(response, "221 Service closing control connection.");
 							send(fd, response, sizeof(response), 0);

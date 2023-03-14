@@ -109,10 +109,25 @@ int main()
                 system("pwd");
             }
         }
-        else if (strcmp(cmd1, "PWD") == 0)
-        {
+        else if (strcmp(cmd1, "PWD") == 0) {
             if (login == 1) {
                 strcat(buffer, cmd1);
+                strcat(buffer, " ");
+                strcat(buffer, client_name);
+                send(socket_FTP, buffer, strlen(buffer), 0);
+                recv(socket_FTP, buffer, sizeof(buffer), 0);
+                printf("%s\n", buffer);
+            }
+            else {
+                printf("530 Not Logged in.\n");
+            }
+            
+        }
+        else if (strcmp(cmd1, "CWD") == 0) {
+
+            if (login == 1) {
+                strcpy(buffer, "CWD ");
+                strcat(buffer, cmd2);
                 strcat(buffer, " ");
                 strcat(buffer, client_name);
                 send(socket_FTP, buffer, strlen(buffer), 0);
