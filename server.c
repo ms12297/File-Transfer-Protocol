@@ -19,7 +19,7 @@ void Retr(int client_sd, int sock_data, char *filename);
 void STOR(int client_sd, int sock_data, char *filename);
 void list(int sock_data, int client_sd);
 void Port(char *buffer);
-int open_socket(int socketcon, int data_port, char ipAddress);
+int open_socket(int socketcon, int data_port, char address[256]);
 char *response; // number response to the server
 
 int active_users = 0;
@@ -265,13 +265,41 @@ int main()
 						}
 						else if (strcmp(tokenArray[0], "LIST") == 0)
 						{
-							printf("LISTINGGGG");
-							char buf[1024];
+							printf("LIST command received\n");
 							int sock_data;
-							sock_data = connect(fd, (struct sockaddr *)&cliaddr, len);
+							char buf[256];
+							bzero(buf, sizeof(buf));
+							// call the client N+1 port //should get the port from client
+							recv(fd, buf, sizeof(buf), 0); // recieving message here is port info
+							printf("receiving");
+							printf("%s", buf);
+
+							// if received port and address Ack sending to client for port command
+							int ack = 1;
+							if (buf < 0)
+							{
+								perror("can't open port");
+								exit(1);
+							}
+							else
+							{
+								printf("sent");
+								send(fd, (char *)&ack, sizeof(ack), 0);
+							}
+							// get the converted ipAddress and port
+							Port(buf);
+
+							int data_sock;
+							data_sock = open_socket(fd, data_port, ipAddress);
+							if (data_sock < 0)
+							{
+								perror("Error connecting to socket");
+							}
+
+							sock_data = connect(data_sock, (struct sockaddr *)&cliaddr, len);
 							if (sock_data < 0)
 							{
-								close(fd);
+								close(data_sock);
 								exit(1);
 							}
 							list(sock_data, fd);
@@ -280,28 +308,36 @@ int main()
 						// RETR for server to respond
 						else if (strcmp(tokenArray[0], "RETR") == 0)
 						{
+							printf("RETR command received\n");
 							int sock_data;
 							char buf[256];
-							bzero(buffer, sizeof(buffer));
+							bzero(buf, sizeof(buf));
 							// call the client N+1 port //should get the port from client
-							// cliaddr.sin_port+=1;
-							printf("here2function");					
-							*buf=recv(fd, buffer, sizeof(buffer), 0); // recieving message
+							recv(fd, buf, sizeof(buf), 0); // recieving message here is port info
+							printf("receiving");
+							printf("%s", buf);
+
 							// if received port and address Ack sending to client for port command
 							int ack = 1;
-							if (buf<0){
+							if (buf < 0)
+							{
 								perror("can't open port");
 								exit(1);
 							}
-							else{
-								send(server_sd, (char*) &ack, sizeof(ack), 0);
+							else
+							{
+								printf("sent");
+								send(fd, (char *)&ack, sizeof(ack), 0);
 							}
+							// get the converted ipAddress and port
 							Port(buf);
+
 							int data_sock;
-        				    data_sock = open_socket(server_sd, data_port, ipAddress);
-           					if (data_sock < 0) {
+							data_sock = open_socket(fd, data_port, ipAddress);
+							if (data_sock < 0)
+							{
 								perror("Error connecting to socket");
-							 }
+							}
 
 							sock_data = connect(data_sock, (struct sockaddr *)&cliaddr, len);
 							if (sock_data < 0)
@@ -315,23 +351,50 @@ int main()
 						// STOR for server to respond
 						else if (strcmp(tokenArray[0], "STOR") == 0)
 						{
+							printf("LIST command received\n");
 							int sock_data;
-							// start data connection
-							printf("herefunction");
-							sock_data = connect(fd, (struct sockaddr *)&cliaddr, len);
-							if (sock_data < 0)
+							char buf[256];
+							bzero(buf, sizeof(buf));
+							// call the client N+1 port //should get the port from client
+							recv(fd, buf, sizeof(buf), 0); // recieving message here is port info
+							printf("receiving");
+							printf("%s", buf);
+
+							// if received port and address Ack sending to client for port command
+							int ack = 1;
+							if (buf < 0)
 							{
-								close(fd);
+								perror("can't open port");
 								exit(1);
 							}
-							STOR(fd, sock_data, tokenArray[1]);
+							else
+							{
+								printf("sent");
+								send(fd, (char *)&ack, sizeof(ack), 0);
+							}
+							// get the converted ipAddress and port
+							Port(buf);
+
+							int data_sock;
+							data_sock = open_socket(fd, data_port, ipAddress);
+							if (data_sock < 0)
+							{
+								perror("Error connecting to socket");
+							}
+
+							sock_data = connect(data_sock, (struct sockaddr *)&cliaddr, len);
+							if (sock_data < 0)
+							{
+								close(data_sock);
+								exit(1);
+							}
+							STOR(sock_data, fd,tokenArray[1]);
 							close(sock_data);
 						}
 						else
 						{
 							strcpy(response, "202 Command not implemented.");
 							send(fd, response, sizeof(response), 0);
-
 						}
 					}
 				}
@@ -343,77 +406,83 @@ int main()
 	return 0;
 }
 
-void Port(char *buffer){ // changing data port
-    char *ip;
-    unsigned long portNo = 0;
-    char newVal[256];
-    char *tokenArray[6];
-    int i = 0;
+void Port(char *buffer)
+{ // changing data port
+	char *ip;
+	unsigned long portNo = 0;
+	char newVal[256];
+	char *tokenArray[6];
+	int i = 0;
 
-    char newconn[2];
-    printf("here");
+	char newconn[2];
+	printf("here");
 
-    strcpy(newVal, buffer);
+	strcpy(newVal, buffer);
 
-    char *pchs;
+	char *pchs;
 
-    pchs = strtok(newVal, " ,.-");
-    while (pchs != NULL && i < 6) {
-        tokenArray[i++] = pchs;
-        pchs = strtok(NULL, " ,.-");
-    }
-    printf("here2");
-    ip = (char *)malloc(256 * sizeof(char));
-    sprintf(ip, "%s.%s.%s.%s", tokenArray[0], tokenArray[1], tokenArray[2], tokenArray[3]);
-    portNo = atoi(tokenArray[4]) * 256 + atoi(tokenArray[5]);
+	pchs = strtok(newVal, " ,.-");
+	while (pchs != NULL && i < 6)
+	{
+		tokenArray[i++] = pchs;
+		pchs = strtok(NULL, " ,.-");
+	}
+	printf("here2");
+	ip = (char *)malloc(256 * sizeof(char));
+	sprintf(ip, "%s.%s.%s.%s", tokenArray[0], tokenArray[1], tokenArray[2], tokenArray[3]);
+	portNo = atoi(tokenArray[4]) * 256 + atoi(tokenArray[5]);
 
-    strcpy(ipAddress, ip);
-    data_port = portNo;
-    printf("%s,%lu", ipAddress, data_port);
+	strcpy(ipAddress, ip);
+	data_port = portNo;
 }
 
-int open_socket(int socketcon, int data_port, char ipAddress)
-{   
-    int newsocket;
-    //open the original control socket to send ack
-    struct sockaddr_in socket_addr;
-    unsigned int len=sizeof(socket_addr);
-	//int sock_listen = connect(sock,(struct sockaddr *) &socket_addr, len);
+int open_socket(int socketcon, int data_port, char address[256])
+{
+	int newsocket;
+	// open the original control socket to send ack
+	struct sockaddr_in socket_addr;
+	unsigned int len = sizeof(socket_addr);
+	// int sock_listen = connect(sock,(struct sockaddr *) &socket_addr, len);
 
-    // create new socket
-	if ((newsocket = socket(AF_INET, SOCK_STREAM, 0)) < 0) {
-		perror("socket() error"); 
+	// create new socket
+	if ((newsocket = socket(AF_INET, SOCK_STREAM, 0)) < 0)
+	{
+		perror("socket() error");
+		return -1;
+	}
+	bzero(&socket_addr, sizeof(socket_addr));
+	socket_addr.sin_family = AF_INET;
+	socket_addr.sin_port = htons(FdataPORT);
+	socket_addr.sin_addr.s_addr = INADDR_ANY;
+
+	int value = 1;
+	if (setsockopt(newsocket, SOL_SOCKET, SO_REUSEADDR, &value, sizeof(int)) == -1)
+	{
+		close(newsocket);
+		perror("setsockopt() error");
 		return -1;
 	}
 
-    socket_addr.sin_family = AF_INET;
-	socket_addr.sin_port = htons(FdataPORT);
-	socket_addr.sin_addr.s_addr = INADDR_ANY ;
-
-    int value  = 1;
-   if (setsockopt(newsocket, SOL_SOCKET, SO_REUSEADDR, &value, sizeof(int)) == -1) {
+	// bind
+	if (bind(newsocket, (struct sockaddr *)&socket_addr, sizeof(socket_addr)) < 0)
+	{
 		close(newsocket);
-		perror("setsockopt() error");
-		return -1; 
+		perror("bind() error");
+		return -1;
 	}
 
-	// bind
-	if (bind(newsocket, (struct sockaddr *) &socket_addr, sizeof(socket_addr)) < 0) {
-		close(newsocket);
-		perror("bind() error"); 
-		return -1; 
-	}      	
-
-    struct sockaddr_in client_addr;
+	struct sockaddr_in client_addr;
+	bzero(&client_addr, sizeof(client_addr));
 	unsigned int len2 = sizeof(client_addr);
 	client_addr.sin_port = htons(data_port);
-	client_addr.sin_addr.s_addr = inet_addr(&ipAddress) ;
+	client_addr.sin_addr.s_addr = inet_addr(ipAddress);
 
-	//server open data connection with client
-    int socket_connect = accept(newsocket,(struct sockaddr *) &client_addr, &len2);
-    if (socket_connect < 0) {
-		perror("accept() error"); 
-		return -1; 
+	// server open data connection with client
+	int socket_connect = accept(newsocket, (struct sockaddr *)&client_addr, &len2);
+	if (socket_connect < 0)
+	{
+		perror("accept() error");
+		return -1;
 	}
 
 	close(newsocket);
