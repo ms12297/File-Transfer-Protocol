@@ -10,10 +10,12 @@
 #define PORT 9000 // port number for FTP, NOT 21?!
 
 unsigned long ftp_port;
+unsigned long data_port;
 char ipAddress[256];
-void Port(char *buffer);
+//void Port(char *buffer);
+void Port(char *address, unsigned int port, int socket);
 //for RETR
-int download(int data_sock, int socket, char* filename);
+int download(int data_sock, char* filename);
 //for connection to data channel
 int open_socket(int socket);
 void FTPsendfile(FILE *file, int sockfd);
@@ -66,6 +68,7 @@ int main()
     ftp_port = htons(client_addr.sin_port);
     sprintf(ipAddress, "%s", inet_ntoa(client_addr.sin_addr));
 
+    data_port=ftp_port;
 
     //welcome
 	printf("220 Service ready for new user.\n");
@@ -157,7 +160,7 @@ int main()
         //SET LOGIN to 1 after USERAUTH
         {
             // test using cmd2 = "127,0,0,1,20,20" which is the IP + port 5140
-            Port(cmd2); // new port for data channel
+            Port(ipAddress, data_port, socket_FTP); // new port for data channel
         }
          else if (strcmp(cmd1, "USER") == 0)
         {
@@ -205,6 +208,7 @@ int main()
         else if (strcmp(cmd1, "LIST") == 0) // refer to boilerplate in assignment3
         {
             int data_sock;
+            send(socket_FTP, buffer, strlen(buffer), 0); 
             data_sock = open_socket(socket_FTP);
             if (data_sock < 0) {
 				perror("Error opening socket");
@@ -220,28 +224,65 @@ int main()
                 perror("Can't get file");
             }
             else{
-                Port(try);
+                send(socket_FTP, buffer, strlen(buffer), 0); 
+                Port(ipAddress, data_port, socket_FTP);
                 file=fopen(cmd2,"r");
                 FTPsendfile(file,socket_FTP);
             }
         }
         //RETR download to local
         else if (strcmp(cmd1, "RETR") == 0)
-        {
-            char try2[]="127,0,0,1,20,30";
-            //Port(try2);
+        { 
             printf("herefunction");
-            int data_sock;
-            data_sock = open_socket(socket_FTP);
-            if (data_sock < 0) {
-				perror("Error opening socket");
-			 }
-            download(data_sock, socket_FTP, cmd2);
+            //new data port number
+            data_port=data_port+1;
+            Port(ipAddress, data_port, socket_FTP);
+            int ack= recv(socket_FTP, buffer, sizeof(buffer), 0);
+            if (ack==1){
+               printf("200 PORT command successful.");
+            }
+             else{
+                printf("port not acked");
+             }
+            strcpy(buffer, "RETR ");
+            strcat(buffer, cmd2);
+            send(socket_FTP, buffer, strlen(buffer), 0); 
+
+            int pid=fork();
+            if (pid==0){
+                struct sockaddr_in socket_addr;
+                unsigned int len=sizeof(socket_addr);
+                //create new port
+                int newsocket=socket(AF_INET, SOCK_STREAM, 0);
+                socket_addr.sin_family = AF_INET;
+	            socket_addr.sin_port = htons(data_port);
+	            socket_addr.sin_addr.s_addr =  inet_addr(ipAddress) ;
+                //bind with new port
+                if (bind(newsocket, (struct sockaddr *) &socket_addr, sizeof(socket_addr)) < 0) {
+		        close(newsocket);
+		        perror("bind() error"); 
+		        return -1; 
+	            }
             
-        }
-        else
-        {
-            printf("202 Command not implemented\n");
+                // listening
+                if (listen(newsocket, 5) < 0) {
+                    close(newsocket);
+                    perror("listen() error");
+                    return -1;
+                }   
+
+                //client open data connection 
+                int socket_transfer = accept(newsocket,(struct sockaddr *) &client_addr, &client_size);
+                if (socket_transfer < 0) {
+                    perror("accept() error"); 
+                    return -1; 
+                }
+                download(socket_transfer, cmd2);
+                close(socket_transfer);
+            }
+             //port function to send to the server the control connection
+            //download(data_sock, socket_FTP, cmd2);
+            
         }
 	}
 
@@ -249,37 +290,20 @@ int main()
 	return 0;
 }
 
-void Port(char *buffer){ // changing data port
-    char *ip;
-    unsigned long portNo = 0;
-    char newVal[256];
-    char *tokenArray[6];
-    int i = 0;
-
-    char newconn[2];
-    printf("here");
-
-    strcpy(newVal, buffer);
-
-    char *pchs;
-
-    pchs = strtok(newVal, " ,.-");
-    while (pchs != NULL && i < 6) {
-        tokenArray[i++] = pchs;
-        pchs = strtok(NULL, " ,.-");
+//send address and port info
+void Port(char *address, unsigned int port, int socket){
+    char dot='.';
+    address+=dot;
+    address+=port;
+    int sent;
+    sent=send(socket, address, strlen( address), 0);
+    if (sent<0){
+        perror("send socket");
     }
-    printf("here2");
-    ip = (char *)malloc(256 * sizeof(char));
-    sprintf(ip, "%s.%s.%s.%s", tokenArray[0], tokenArray[1], tokenArray[2], tokenArray[3]);
-    portNo = atoi(tokenArray[4]) * 256 + atoi(tokenArray[5]);
-
-    strcpy(ipAddress, ip);
-    ftp_port = portNo;
-    printf("200 PORT command successful.");
-    printf("%s,%lu", ipAddress, ftp_port);
 }
 
-int download(int data_sock, int socket, char* filename)
+
+int download(int data_sock, char* filename)
 {
     char data[1024];
     int size;
@@ -314,7 +338,7 @@ int open_socket(int socketcon)
 	}
 
     socket_addr.sin_family = AF_INET;
-	socket_addr.sin_port = htons(ftp_port);
+	socket_addr.sin_port = htons(data_port);
 	socket_addr.sin_addr.s_addr = inet_addr(ipAddress) ;
 
     int value  = 1;
