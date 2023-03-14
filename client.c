@@ -162,17 +162,20 @@ int main()
             int p1, p2;
             p1 = data_port / 256;
             p2 = data_port % 256;
+            // set address to be the same cause local
             char send_port[256] = "127,0,0,1,";
             char pf[256];
             char pb[256];
+            // cast the int to char array
             sprintf(pf, "%d", p1);
             sprintf(pb, "%d", p2);
+            // concatenation for the send_port to be sent
             strcat(send_port, pf);
             strcat(send_port, ",");
             strcat(send_port, pb);
-            printf("%s\n",pf);
-            printf("%s\n",pb);
-            printf("%s\n",send_port);
+            printf("%s\n", pf);
+            printf("%s\n", pb);
+            printf("%s\n", send_port);
             // send port info
             int sent;
             sent = send(socket_FTP, send_port, strlen(send_port), 0);
@@ -180,7 +183,8 @@ int main()
             {
                 perror("send socket\n");
             }
-            else{
+            else
+            {
                 printf("200 PORT command successful.\n");
             }
         }
@@ -232,14 +236,18 @@ int main()
         {
             // new data port number send port info to server
             data_port = data_port + 1;
+            // conversion from the project pdf
             int p1, p2;
             p1 = data_port / 256;
             p2 = data_port % 256;
+            // set address to be the same cause local
             char send_port[256] = "127,0,0,1,";
             char pf[256];
             char pb[256];
+            // cast the int to char array
             sprintf(pf, "%d", p1);
             sprintf(pb, "%d", p2);
+            // concatenation for the send_port to be sent
             strcat(send_port, pf);
             strcat(send_port, ",");
             strcat(send_port, pb);
@@ -335,14 +343,18 @@ int main()
             {
                 // new data port number send port info to server
                 data_port = data_port + 1;
+                // conversion from the project pdf
                 int p1, p2;
                 p1 = data_port / 256;
                 p2 = data_port % 256;
+                // set address to be the same cause local
                 char send_port[256] = "127,0,0,1,";
                 char pf[256];
                 char pb[256];
+                // cast the int to char array
                 sprintf(pf, "%d", p1);
                 sprintf(pb, "%d", p2);
+                // concatenation for the send_port to be sent
                 strcat(send_port, pf);
                 strcat(send_port, ",");
                 strcat(send_port, pb);
@@ -366,7 +378,7 @@ int main()
                     printf("port not acked");
                 }
                 // send the command
-                bzero(buffer,sizeof(buffer));
+                bzero(buffer, sizeof(buffer));
                 strcpy(buffer, "STOR ");
                 strcat(buffer, cmd2);
 
@@ -421,16 +433,20 @@ int main()
         else if (strcmp(cmd1, "RETR") == 0)
         {
             // new data port number send port info to server
-            data_port++;
+            data_port = data_port + 1;
             printf("%d\n", data_port);
+            // conversion from the project pdf
             int p1, p2;
             p1 = data_port / 256;
             p2 = data_port % 256;
+            // set address to be the same cause local
             char send_port[256] = "127,0,0,1,";
             char pf[256];
             char pb[256];
+            // cast the int to char array
             sprintf(pf, "%d", p1);
             sprintf(pb, "%d", p2);
+            // concatenation for the send_port to be sent
             strcat(send_port, pf);
             strcat(send_port, ",");
             strcat(send_port, pb);
@@ -446,32 +462,33 @@ int main()
             }
             // receive ack
             int ack;
-            bzero(response,sizeof(response));
+            bzero(response, sizeof(response));
             ack = recv(socket_FTP, response, sizeof(response), 0);
 
             if (ack > 0)
             {
-                printf("200 PORT command successful.\n"); //the program suspends here 
+                printf("200 PORT command successful.\n"); // the program suspends here
             }
             else
             {
                 printf("port not acked");
             }
             // send the command
-            bzero(buffer,sizeof(buffer));
+            bzero(buffer, sizeof(buffer));
             strcpy(buffer, "RETR ");
             strcat(buffer, cmd2);
 
-            if (send(socket_FTP, buffer, strlen(buffer), 0) < 0)// why is this not picking up by the server //server not receiving properly 
+            if (send(socket_FTP, buffer, strlen(buffer), 0) < 0) // why is this not picking up by the server //server not receiving properly
             {
                 perror("not sent");
             }
-            else{
+            else
+            {
                 printf("SENT");
             }
-            bzero(buffer,sizeof(buffer));
+            bzero(buffer, sizeof(buffer));
             recv(socket_FTP, response, sizeof(response), 0);
-            printf("%s\n",response);
+            printf("%s\n", response);
 
             struct sockaddr_in socket_addr, socket_transfer_addr;
             unsigned int len = sizeof(socket_addr);
