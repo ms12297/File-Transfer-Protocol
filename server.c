@@ -112,47 +112,15 @@ int main()
 					}
 					list(sock_data, client_sd);
 					close(sock_data);
-					system("ls"); // server
-				}
-				else if (strcmp(cmd1, "PWD") == 0)
-				{
-					system("pwd"); // server
-				}
-				else if (strcmp(cmd1, "CWD") == 0)
-				{
-					// chdir(cmd2); //server
-
-					if (chdir(cmd2) < 0)
-					{
-						char res[]="550 No such file or directory";
-						strcpy(response,res);
-						int end = send(client_sd,response,strlen(response),0);
-						perror("550 No such file or directory");
-					}
-					else{
-						printf("200 directory changed to\n");
-						system("pwd");
-					}
-				}
-				else if (strcmp(cmd1, "PORT") == 0) 
-				{
-					// test using cmd2 = "127,0,0,1,20,20" which is the IP + port 5140
-					Port(cmd2); // new port for data channel
 				}
 
-				//when command is Quit server send response
-				else if (strcmp(cmd1, "QUIT") == 0) 
-				{
-					char res[]="221 Service closing control connection.";
-					strcpy(response,res);
-					int end = send(client_sd,response,strlen(response),0);
-				}
 				//RETR for server to respond
 				else if (strcmp(cmd1, "RETR") == 0)
 				{	
 					int sock_data;
 					//call the client N+1 port //should get the port from client
-					cliaddr.sin_port+=1;
+					//cliaddr.sin_port+=1;
+					printf("herefunction");
 					sock_data=connect(client_sd,(struct sockaddr *) &cliaddr, len);
 					if (sock_data < 0) {
 						close(client_sd);
@@ -165,8 +133,8 @@ int main()
 				else if (strcmp(cmd1, "STOR") == 0)
 				{	
 					int sock_data;
-					//call the client N+1 port //should get the port from client
-					cliaddr.sin_port+=1;
+					//start data connection
+					printf("herefunction");
 					sock_data=connect(client_sd,(struct sockaddr *) &cliaddr, len);
 					if (sock_data < 0) {
 						close(client_sd);
@@ -194,6 +162,10 @@ int main()
 }
 
 void list( int sock_data, int client_sd){
+	char data[1024];
+	int size;
+	FILE* file;
+
 
 }
 
@@ -221,13 +193,15 @@ void Retr(int client_sd, int sock_data, char* filename)
 	size_t read;							
 		
 	fd = fopen(filename, "r");
+	printf("hereread");
 	
 	if (!fd) {	
 		char res[]="550 No such file or directory";
 		strcpy(response,res);
 		int end = send(client_sd,response,strlen(response),0);
 		
-	} else {	
+	} else {
+		printf("here");	
 		char res[]="150 File status okay; about to open. data connection.";
 		strcpy(response,res);
 		int end1 = send(client_sd,response,strlen(response),0);
