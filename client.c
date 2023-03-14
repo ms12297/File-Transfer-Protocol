@@ -168,9 +168,9 @@ int main()
             char pb[256];
             // cast the int to char array
             sprintf(pf, "%d", p1);
+            strcat(send_port, pf);
             sprintf(pb, "%d", p2);
             // concatenation for the send_port to be sent
-            strcat(send_port, pf);
             strcat(send_port, ",");
             strcat(send_port, pb);
             printf("%s\n", pf);
@@ -246,9 +246,9 @@ int main()
             char pb[256];
             // cast the int to char array
             sprintf(pf, "%d", p1);
+            strcat(send_port, pf);
             sprintf(pb, "%d", p2);
             // concatenation for the send_port to be sent
-            strcat(send_port, pf);
             strcat(send_port, ",");
             strcat(send_port, pb);
             // send port info
@@ -353,9 +353,9 @@ int main()
                 char pb[256];
                 // cast the int to char array
                 sprintf(pf, "%d", p1);
+                strcat(send_port, pf);
                 sprintf(pb, "%d", p2);
                 // concatenation for the send_port to be sent
-                strcat(send_port, pf);
                 strcat(send_port, ",");
                 strcat(send_port, pb);
                 // send port info
