@@ -313,7 +313,7 @@ int main()
 							char buf[256];
 							bzero(buf, sizeof(buf));
 							// call the client N+1 port //should get the port from client
-							int yt=recv(fd, buf, sizeof(buf), 0); // recieving message here is port info
+							int yt=recv(fd, buf, sizeof(buf), 0); // recieving message here is port info //here is the problem it is not recv properly
 							if (yt<0){
 								perror("can't get");
 							}

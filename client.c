@@ -230,14 +230,6 @@ int main()
 
         else if (strcmp(cmd1, "LIST") == 0) // refer to boilerplate in assignment3
         {
-            // send the command
-            strcpy(buffer, "LIST ");
-
-            if (send(socket_FTP, buffer, strlen(buffer), 0) < 0)
-            {
-                perror("not sent");
-            }
-            recv(socket_FTP, response, sizeof(response), 0);
             // new data port number send port info to server
             data_port = data_port + 1;
             int p1, p2;
@@ -270,6 +262,15 @@ int main()
             {
                 printf("port not acked");
             }
+
+            // send the command
+            strcpy(buffer, "LIST ");
+
+            if (send(socket_FTP, buffer, strlen(buffer), 0) < 0)
+            {
+                perror("not sent");
+            }
+            recv(socket_FTP, response, sizeof(response), 0);
 
             struct sockaddr_in socket_addr, socket_transfer_addr;
             unsigned int len = sizeof(socket_addr);
@@ -332,15 +333,6 @@ int main()
             }
             else
             {
-                // send the command
-                strcpy(buffer, "STOR ");
-                strcat(buffer, cmd2);
-
-                if (send(socket_FTP, buffer, strlen(buffer), 0) < 0)
-                {
-                    perror("not sent");
-                }
-                recv(socket_FTP, response, sizeof(response), 0);
                 // new data port number send port info to server
                 data_port = data_port + 1;
                 int p1, p2;
@@ -373,7 +365,16 @@ int main()
                 {
                     printf("port not acked");
                 }
+                // send the command
+                bzero(buffer,sizeof(buffer));
+                strcpy(buffer, "STOR ");
+                strcat(buffer, cmd2);
 
+                if (send(socket_FTP, buffer, strlen(buffer), 0) < 0)
+                {
+                    perror("not sent");
+                }
+                recv(socket_FTP, response, sizeof(response), 0);
                 struct sockaddr_in socket_addr, socket_transfer_addr;
                 unsigned int len = sizeof(socket_addr);
 
@@ -448,21 +449,20 @@ int main()
             bzero(response,sizeof(response));
             ack = recv(socket_FTP, response, sizeof(response), 0);
 
-            if (ack < 0)
+            if (ack > 0)
             {
-                printf("port not acked");
-                exit(1);
+                printf("200 PORT command successful.\n"); //the program suspends here 
             }
             else
             {
-                printf("%s\n", response);
+                printf("port not acked");
             }
             // send the command
             bzero(buffer,sizeof(buffer));
             strcpy(buffer, "RETR ");
             strcat(buffer, cmd2);
 
-            if (send(socket_FTP, buffer, strlen(buffer), 0) < 0)
+            if (send(socket_FTP, buffer, strlen(buffer), 0) < 0)// why is this not picking up by the server //server not receiving properly 
             {
                 perror("not sent");
             }
