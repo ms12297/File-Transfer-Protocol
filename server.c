@@ -11,6 +11,8 @@
 #define PORT 9000 // NOT 21?!
 #define MAX_USERS 20
 
+unsigned long ftp_port;
+char ip_addr[256];
 int active_users = 0;
 
 struct user
@@ -204,13 +206,12 @@ int main()
 							for (int i = 0; i < active_users; i++) {
 								if (strcmp(users[i].userName, tokenArray[1]) == 0) {
 									strcpy(response, users[i].userDirectory);
-									send(fd, users[i].userDirectory, sizeof(users[i].userDirectory), 0);
+									printf("%s requested PWD\n", tokenArray[1]);
+									send(fd, response, sizeof(response), 0);
 								}
 							}
 						}
-
-
-						if (strcmp(tokenArray[0], "CWD") == 0) {
+						else if (strcmp(tokenArray[0], "CWD") == 0) {
 							char *command = tokenArray[1];
 							char currPath[1024];
 
@@ -218,6 +219,8 @@ int main()
 								if (strcmp(users[i].userName, tokenArray[2]) == 0) {
 									// moving to user dir first
 									chdir(users[i].userDirectory);
+
+									printf("%s requested CWD\n", tokenArray[2]);
 
 									if (chdir(command) == 0) {
 										char msg[1024] = "200 directory changed to ";
@@ -235,6 +238,103 @@ int main()
 								}
 							}
 						}
+
+						else if (strcmp(tokenArray[0], "LIST") == 0) {
+
+							char *cmd1 = strtok(tokenArray[1], ":");
+							char *cmd2 = strtok(NULL, " \n");
+
+							strcpy(ip_addr, cmd1);
+							ftp_port = atoi(cmd2); // FTP port string to int
+
+							printf("%s has requested LIST\n", tokenArray[2]);
+
+							strcpy(response, "200 PORT command successful.");
+							send(fd, response, sizeof(response), 0);
+
+							// forking the child to excecute LIST
+							int pid = fork();
+
+							if (pid == 0)
+							{ 
+								// create new socket for data channel
+								int transfer_sock = socket(AF_INET, SOCK_STREAM, 0);
+								if (transfer_sock < 0)
+								{
+									perror("socket");
+                    				return -1;
+								}
+
+								// set up the address and port
+								struct sockaddr_in client_addr;
+								client_addr.sin_family = AF_INET;
+								client_addr.sin_port = htons(ftp_port);
+								client_addr.sin_addr.s_addr = inet_addr(ip_addr);
+
+								// binding client to port
+								struct sockaddr_in data_addr;
+								data_addr.sin_family = AF_INET;
+								data_addr.sin_addr.s_addr = inet_addr(ip_addr);
+								data_addr.sin_port = htons(9020); // 9020,21 for data
+
+								if (bind(transfer_sock, (struct sockaddr *)&data_addr, sizeof(struct sockaddr_in))<0) {
+									perror("bind failed");
+                    				continue;
+								}
+								// Send connection request to server:
+								socklen_t addr_size = sizeof(client_addr);
+								if (connect(transfer_sock, (struct sockaddr *)&client_addr, addr_size) < 0)
+								{
+									perror("connect");
+									return -1;
+								}
+
+								strcpy(response, "150 File status okay; about to open data connection.\n");
+								send(fd, response, sizeof(response), 0);
+								
+								for (int i = 0; i < active_users; i++)
+								{
+									if (strcmp(users[i].userName, tokenArray[2]) == 0)
+									{
+										chdir(users[i].userDirectory);
+									}
+								}
+
+								// LIST data -> file -> send file -> remove file
+								system("ls>list.txt");
+								FILE *fp;
+								fp = fopen("list.txt", "r");
+								if (fp == NULL)
+								{
+									perror("Error opening file!\n");
+									exit(1);
+								}
+
+								// getting the size of the file
+								fseek(fp, 0, SEEK_END);
+								int size = ftell(fp);
+
+								// reset to beg
+								fseek(fp, 0, SEEK_SET);
+								
+								// send the size and data in file
+								char *data = malloc(size + 1);
+								fread(data, size, 1, fp);
+								fclose(fp);
+								send(transfer_sock, &size, sizeof(int), 0);
+								send(transfer_sock, data, size + 1, 0);
+
+								// remove the files
+								system("rm list.txt");
+								close(transfer_sock); // close the data channel
+								exit(1);
+							}
+							else if (pid < 0){
+								perror("fork failed");
+								continue;
+							}
+						}
+
 
 
 						else if (strcmp(tokenArray[0], "QUIT") == 0) {
