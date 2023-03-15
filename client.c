@@ -10,7 +10,7 @@
 #define PORT 9000 // port number for FTP, NOT 21?!
 
 unsigned long ftp_port;
-char ipAddress[256];
+char ip_addr[256];
 void Port(char *buffer);
 
 
@@ -56,7 +56,7 @@ int main()
         exit(-1);
     }
     ftp_port = htons(client_addr.sin_port);
-    sprintf(ipAddress, "%s", inet_ntoa(client_addr.sin_addr));
+    sprintf(ip_addr, "%s", inet_ntoa(client_addr.sin_addr));
 
 
     //welcome
@@ -114,7 +114,7 @@ int main()
                 strcat(buffer, cmd1);
                 strcat(buffer, " ");
                 strcat(buffer, client_name);
-                send(socket_FTP, buffer, strlen(buffer), 0);
+                send(socket_FTP, buffer, sizeof(buffer), 0);
                 recv(socket_FTP, buffer, sizeof(buffer), 0);
                 printf("%s\n", buffer);
             }
@@ -130,7 +130,7 @@ int main()
                 strcat(buffer, cmd2);
                 strcat(buffer, " ");
                 strcat(buffer, client_name);
-                send(socket_FTP, buffer, strlen(buffer), 0);
+                send(socket_FTP, buffer, sizeof(buffer), 0);
                 recv(socket_FTP, buffer, sizeof(buffer), 0);
                 printf("%s\n", buffer);
             }
@@ -138,6 +138,94 @@ int main()
                 printf("530 Not Logged in.\n");
             }
             
+        }
+
+        else if (strcmp(cmd1, "LIST") == 0) {
+            if (login == 1) {
+                char portStr[256];
+
+                // initiate new port in every transfer, so ++
+                ftp_port++;
+                sprintf(portStr, "%lu", ftp_port);
+
+                // send LIST command to server
+                strcpy(buffer, "LIST ");
+                strcat(buffer, "127.0.0.1:");
+                strcat(buffer, portStr);
+                strcat(buffer, " ");
+                strcat(buffer, client_name);
+                send(socket_FTP, buffer, sizeof(buffer), 0);
+
+                // recieving success msg
+                int bytes = recv(socket_FTP, response, sizeof(response), 0);
+                printf("%s\n", response); 
+
+
+                // create new socket for data channel
+                int new_sock_ftp = socket(AF_INET, SOCK_STREAM, 0);
+                if (new_sock_ftp < 0) {
+                    perror("socket");
+                    continue;
+                }
+
+                // set socket options
+                int value = 1;
+                setsockopt(new_sock_ftp, SOL_SOCKET, SO_REUSEADDR, &value, sizeof(value));
+            
+                // binding new sockets for the data channel
+                struct sockaddr_in new_server_addr;
+                bzero(&new_server_addr, sizeof(new_server_addr));
+                new_server_addr.sin_family = AF_INET;
+                new_server_addr.sin_port = htons(ftp_port);
+                new_server_addr.sin_addr.s_addr = inet_addr(ip_addr);
+
+                // bind new socket to port
+                if(bind(new_sock_ftp, (struct sockaddr*)&new_server_addr,sizeof(new_server_addr))<0)
+                {
+                    perror("bind failed");
+                    continue;
+                }
+                //listen
+                if(listen(new_sock_ftp,5)<0)
+                {
+                    perror("listen failed");
+                    close(new_sock_ftp);
+                    continue;
+                }
+
+                struct sockaddr_in new_client_addr;
+                bzero(&new_client_addr,sizeof(new_client_addr));
+                unsigned int cl_len = sizeof(new_client_addr);
+
+                // accept connection
+                int new_client_sock = accept(new_sock_ftp, (struct sockaddr*)&new_client_addr, &cl_len);
+                if (new_client_sock < 0) {
+                    perror("accept");
+                    continue;
+                }
+
+                // recieving transfer init msg
+                bytes = recv(socket_FTP, response, sizeof(response), 0);
+                printf("%s\n", response); 
+
+
+                // recieve data from server by dynamic allocated buffer
+                int size;
+                recv(new_client_sock, &size, sizeof(size), 0);
+                char *data = malloc(size);
+                recv(new_client_sock, data, size, 0);
+
+                printf("%s\n", data);
+                printf("226 Transfer complete\n");
+                free(data);
+
+                // close sockets
+                close(new_client_sock);
+                close(new_sock_ftp);
+            }
+            else {
+                printf("530 Not Logged in.\n");
+            }
         }
 
         //SET LOGIN to 1 after USERAUTH
@@ -224,9 +312,9 @@ void Port(char *buffer){ // changing data port
     sprintf(ip, "%s.%s.%s.%s", tokenArray[0], tokenArray[1], tokenArray[2], tokenArray[3]);
     portNo = atoi(tokenArray[4]) * 256 + atoi(tokenArray[5]);
 
-    strcpy(ipAddress, ip);
+    strcpy(ip_addr, ip);
     ftp_port = portNo;
 
-    printf("%s %lu\n", ipAddress, ftp_port);
+    printf("%s %lu\n", ip_addr, ftp_port);
 
 }
