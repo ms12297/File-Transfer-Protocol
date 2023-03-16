@@ -339,6 +339,115 @@ int main()
             }
         }
 
+        else if (strcmp(cmd1, "RETR") == 0) 
+        {
+            if (login == 1) {
+
+                char portStr[256];
+
+                // initiate new port in every transfer, so ++
+                ftp_port++;
+                sprintf(portStr, "%lu", ftp_port);
+
+                // send LIST command to server
+                strcpy(buffer, "RETR ");
+                strcat(buffer, "127.0.0.1:");
+                strcat(buffer, portStr);
+                strcat(buffer, " ");
+                strcat(buffer, client_name);
+                strcat(buffer, " ");
+                strcat(buffer, cmd2);
+
+                send(socket_FTP, buffer, sizeof(buffer), 0);
+
+                // recieving success msg
+                int bytes = recv(socket_FTP, response, sizeof(response), 0);
+                printf("%s\n", response);
+
+                if (strcmp(response, "550 No such file or directory.") == 0) {
+                    continue;
+                }
+
+                // create new socket for data channel
+                int new_sock_ftp = socket(AF_INET, SOCK_STREAM, 0);
+                if (new_sock_ftp < 0) {
+                    perror("socket");
+                    continue;
+                }
+
+                // set socket options
+                int value = 1;
+                setsockopt(new_sock_ftp, SOL_SOCKET, SO_REUSEADDR, &value, sizeof(value));
+            
+                // binding new sockets for the data channel
+                struct sockaddr_in new_server_addr;
+                bzero(&new_server_addr, sizeof(new_server_addr));
+                new_server_addr.sin_family = AF_INET;
+                new_server_addr.sin_port = htons(ftp_port);
+                new_server_addr.sin_addr.s_addr = inet_addr(ip_addr);
+
+                // bind new socket to port
+                if(bind(new_sock_ftp, (struct sockaddr*)&new_server_addr,sizeof(new_server_addr))<0)
+                {
+                    perror("bind failed");
+                    continue;
+                }
+                //listen
+                if(listen(new_sock_ftp,5)<0)
+                {
+                    perror("listen failed");
+                    close(new_sock_ftp);
+                    continue;
+                }
+
+                struct sockaddr_in new_client_addr;
+                bzero(&new_client_addr,sizeof(new_client_addr));
+                unsigned int cl_len = sizeof(new_client_addr);
+
+                // accept connection
+                int new_client_sock = accept(new_sock_ftp, (struct sockaddr*)&new_client_addr, &cl_len);
+                if (new_client_sock < 0) {
+                    perror("accept");
+                    continue;
+                }
+
+                // recieving transfer init msg, control so socket_FTP
+                bytes = recv(socket_FTP, response, sizeof(response), 0);
+                printf("%s\n", response); 
+
+
+                // get the size from the client
+                long size;
+                recv(new_client_sock, &size, sizeof(long), 0);
+                char *data = malloc(size + 1); // allocating the size of buffer
+
+                // recieve the data
+                recv(new_client_sock, data, size, 0);
+
+                // writing the pwd to a file
+                FILE *file;
+                file = fopen(cmd2, "wb");
+                if (file == NULL)
+                {
+                    perror("Error opening file!\n");
+                    exit(1);
+                }
+                // write data to file
+				fwrite(data, size + 1, 1, file);
+                fclose(file);
+                printf("226 Transfer complete\n");
+                free(data);
+                
+                // close sockets
+                close(new_client_sock);
+                close(new_sock_ftp);
+                
+            }
+            else {
+                printf("530 Not Logged in.\n");
+            }
+        }
+
 
         else if (strcmp(cmd1, "PORT") == 0) 
         {
