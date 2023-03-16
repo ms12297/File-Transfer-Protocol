@@ -238,7 +238,6 @@ int main()
 								}
 							}
 						}
-
 						else if (strcmp(tokenArray[0], "LIST") == 0) {
 
 							char *cmd1 = strtok(tokenArray[1], ":");
@@ -334,8 +333,95 @@ int main()
 								continue;
 							}
 						}
+					
+						else if (strcmp(tokenArray[0], "STOR") == 0) {
 
+							char *cmd1 = strtok(tokenArray[1], ":");
+							char *cmd2 = strtok(NULL, " \n");
 
+							strcpy(ip_addr, cmd1);
+							ftp_port = atoi(cmd2); // FTP port string to int
+
+							printf("%s has requested STOR\n", tokenArray[2]);
+
+							strcpy(response, "200 PORT command successful.");
+							send(fd, response, sizeof(response), 0);
+
+							// forking the child to excecute LIST
+							int pid = fork();
+
+							if (pid == 0)
+							{ 
+								// create new socket for data channel
+								int transfer_sock = socket(AF_INET, SOCK_STREAM, 0);
+								if (transfer_sock < 0)
+								{
+									perror("socket");
+                    				return -1;
+								}
+
+								// set up the address and port
+								struct sockaddr_in client_addr;
+								client_addr.sin_family = AF_INET;
+								client_addr.sin_port = htons(ftp_port);
+								client_addr.sin_addr.s_addr = inet_addr(ip_addr);
+
+								// binding client to port
+								struct sockaddr_in data_addr;
+								data_addr.sin_family = AF_INET;
+								data_addr.sin_addr.s_addr = inet_addr(ip_addr);
+								data_addr.sin_port = htons(9020); // 9020,21 for data
+
+								if (bind(transfer_sock, (struct sockaddr *)&data_addr, sizeof(struct sockaddr_in))<0) {
+									perror("bind failed");
+                    				continue;
+								}
+								// Send connection request to server:
+								socklen_t addr_size = sizeof(client_addr);
+								if (connect(transfer_sock, (struct sockaddr *)&client_addr, addr_size) < 0)
+								{
+									perror("connect");
+									return -1;
+								}
+
+								strcpy(response, "150 File status okay; about to open data connection.");
+								send(fd, response, sizeof(response), 0);
+
+								// get the size from the client
+								long size;
+								recv(transfer_sock, &size, sizeof(long), 0);
+								char *data = malloc(size + 1); // allocating the size of buffer
+
+								// recieve the data
+								recv(transfer_sock, data, size, 0);
+
+								// writing the pwd to a file
+								FILE *file;
+
+								file = fopen(tokenArray[3], "wb");
+								if (file == NULL)
+								{
+									perror("Error opening file!\n");
+									exit(1);
+								}
+
+								// write data to file
+								fwrite(data, size + 1, 1, file);
+								fflush(file);
+
+								send(transfer_sock, "226 Transfer complete", 99, 0);
+
+								close(transfer_sock);
+								free(data);
+								
+								exit(1);
+
+							}
+							else if (pid < 0){
+								perror("fork failed");
+								continue;
+							}
+						}
 
 						else if (strcmp(tokenArray[0], "QUIT") == 0) {
 							strcpy(response, "221 Service closing control connection.");
